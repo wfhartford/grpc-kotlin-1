@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>io.rouz</groupId>
+    <groupId>ca.cutterslade</groupId>
     <artifactId>grpc-kotlin-parent</artifactId>
     <version>0.0.3-SNAPSHOT</version>
   </parent>

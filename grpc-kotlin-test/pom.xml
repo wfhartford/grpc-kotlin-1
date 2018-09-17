@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
-    <groupId>io.rouz</groupId>
+    <groupId>ca.cutterslade</groupId>
     <artifactId>grpc-kotlin-parent</artifactId>
     <version>0.0.3-SNAPSHOT</version>
   </parent>
@@ -82,7 +82,7 @@
           <protocPlugins>
             <protocPlugin>
               <id>GrpcKotlinGenerator</id>
-              <groupId>io.rouz</groupId>
+              <groupId>ca.cutterslade</groupId>
               <artifactId>grpc-kotlin-gen</artifactId>
               <version>${project.version}</version>
               <mainClass>io.rouz.grpc.kotlin.GrpcKotlinGenerator</mainClass>
