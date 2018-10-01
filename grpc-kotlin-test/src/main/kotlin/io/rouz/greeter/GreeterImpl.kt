@@ -33,15 +33,15 @@ class GreeterImpl : GreeterGrpcKt.GreeterImplBase() {
   private val pool = newFixedThreadPoolContext(4, "server-pool")
   private val log = KotlinLogging.logger("server")
 
-  override fun greet(request: GreetRequest): Deferred<GreetReply> = async(pool) {
+  override suspend fun greet(request: GreetRequest): GreetReply {
     log.info(request.greeting)
 
-    GreetReply.newBuilder()
+    return GreetReply.newBuilder()
         .setReply("Hello " + request.greeting)
         .build()
   }
 
-  override fun greetServerStream(request: GreetRequest): ReceiveChannel<GreetReply> = produce(pool) {
+  override suspend fun greetServerStream(request: GreetRequest): ReceiveChannel<GreetReply> = produce(pool) {
     log.info(request.greeting)
     send(GreetReply.newBuilder()
         .setReply("Hello ${request.greeting}!")
@@ -51,8 +51,7 @@ class GreeterImpl : GreeterGrpcKt.GreeterImplBase() {
         .build())
   }
 
-  override fun greetClientStream(requestChannel: ReceiveChannel<GreetRequest>)
-      : Deferred<GreetReply> = async(pool) {
+  override suspend fun greetClientStream(requestChannel: ReceiveChannel<GreetRequest>) : GreetReply {
     val greetings = mutableListOf<String>()
 
     for (request in requestChannel) {
@@ -60,12 +59,12 @@ class GreeterImpl : GreeterGrpcKt.GreeterImplBase() {
       greetings.add(request.greeting)
     }
 
-    GreetReply.newBuilder()
+    return GreetReply.newBuilder()
         .setReply("Hi to all of $greetings!")
         .build()
   }
 
-  override fun greetBidirectional(requestChannel: ReceiveChannel<GreetRequest>)
+  override suspend fun greetBidirectional(requestChannel: ReceiveChannel<GreetRequest>)
       : ReceiveChannel<GreetReply> = produce(pool) {
     var count = 0
     val queue = mutableListOf<Job>()

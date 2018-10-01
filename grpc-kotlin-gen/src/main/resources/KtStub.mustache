@@ -1,5 +1,5 @@
 {{#packageName}}
-package {{packageName}};
+package {{packageName}}
 {{/packageName}}
 
 import {{packageName}}.{{serviceName}}Grpc.*
@@ -12,6 +12,7 @@ import io.grpc.stub.AbstractStub
 import io.grpc.stub.ServerCalls
 import io.grpc.stub.StreamObserver
 
+import kotlinx.coroutines.experimental.async
 import kotlinx.coroutines.experimental.CompletableDeferred
 import kotlinx.coroutines.experimental.Deferred
 import kotlinx.coroutines.experimental.channels.LinkedListChannel
@@ -76,17 +77,58 @@ object {{className}} {
     {{#methods}}
     {{#javaDoc}}{{{javaDoc}}}{{/javaDoc}}
     {{#deprecated}}@Deprecated("deprecated"){{/deprecated}}
-    open fun {{methodName}}(request{{#isManyInput}}Channel{{/isManyInput}}: {{#isManyInput}}ReceiveChannel<{{inputType}}>{{/isManyInput}}{{^isManyInput}}{{inputType}}{{/isManyInput}}): {{#isManyOutput}}ReceiveChannel{{/isManyOutput}}{{^isManyOutput}}Deferred{{/isManyOutput}}<{{outputType}}> {
-      throw io.grpc.StatusRuntimeException(io.grpc.Status.UNIMPLEMENTED);
+    {{#isManyInput}}
+    {{#isManyOutput}}
+    {{! Many input many outpout}}
+    open suspend fun {{methodName}}(requestChannel: ReceiveChannel<{{inputType}}>): ReceiveChannel<{{outputType}}> {
+      throw io.grpc.StatusRuntimeException(io.grpc.Status.UNIMPLEMENTED)
     }
 
-    internal fun {{methodName}}Internal({{^isManyInput}}request: {{inputType}}, {{/isManyInput}}responseObserver: StreamObserver<{{outputType}}>){{#isManyInput}}: StreamObserver<{{inputType}}>{{/isManyInput}} {
-      {{#isManyInput}}val requestChannel = StreamObserverChannel<{{inputType}}>(){{/isManyInput}}
-      val response{{^isManyOutput}}Deferred{{/isManyOutput}}{{#isManyOutput}}Channel{{/isManyOutput}} = {{methodName}}(request{{#isManyInput}}Channel{{/isManyInput}})
-      {{#isManyOutput}}connectChannelToObserver(responseChannel, responseObserver){{/isManyOutput}}
-      {{^isManyOutput}}connectDeferredToObserver(responseDeferred, responseObserver){{/isManyOutput}}
-      {{#isManyInput}}return requestChannel{{/isManyInput}}
+    internal fun {{methodName}}Internal(responseObserver: StreamObserver<{{outputType}}>): StreamObserver<{{inputType}}> {
+      val requestChannel = StreamObserverChannel<{{inputType}}>()
+      val responseChannel = runBlocking { {{methodName}}(requestChannel) }
+      connectChannelToObserver(responseChannel, responseObserver)
+      return requestChannel
     }
+    {{/isManyOutput}}
+    {{^isManyOutput}}
+    {{! Many input single output}}
+    open suspend fun {{methodName}}(requestChannel: ReceiveChannel<{{inputType}}>): {{outputType}} {
+      throw io.grpc.StatusRuntimeException(io.grpc.Status.UNIMPLEMENTED)
+    }
+
+    internal fun {{methodName}}Internal(responseObserver: StreamObserver<{{outputType}}>): StreamObserver<{{inputType}}> {
+      val requestChannel = StreamObserverChannel<{{inputType}}>()
+      val responseDeferred = async { {{methodName}}(requestChannel) }
+      connectDeferredToObserver(responseDeferred, responseObserver)
+      return requestChannel
+    }
+    {{/isManyOutput}}
+    {{/isManyInput}}
+    {{^isManyInput}}
+    {{#isManyOutput}}
+    {{! Single input many outout}}
+    open suspend fun {{methodName}}(request: {{inputType}}): ReceiveChannel<{{outputType}}> {
+      throw io.grpc.StatusRuntimeException(io.grpc.Status.UNIMPLEMENTED)
+    }
+
+    internal fun {{methodName}}Internal(request: {{inputType}}, responseObserver: StreamObserver<{{outputType}}>) {
+      val responseChannel = runBlocking { {{methodName}}(request) }
+      connectChannelToObserver(responseChannel, responseObserver)
+    }
+    {{/isManyOutput}}
+    {{^isManyOutput}}
+    {{! Single input single outout}}
+    open suspend fun {{methodName}}(request: {{inputType}}): {{outputType}} {
+      throw io.grpc.StatusRuntimeException(io.grpc.Status.UNIMPLEMENTED)
+    }
+
+    internal fun {{methodName}}Internal(request: {{inputType}}, responseObserver: StreamObserver<{{outputType}}>) {
+      val responseDeferred = async { {{methodName}}(request) }
+      connectDeferredToObserver(responseDeferred, responseObserver)
+    }
+    {{/isManyOutput}}
+    {{/isManyInput}}
 
     {{/methods}}
     override fun bindService(): ServerServiceDefinition {
@@ -97,7 +139,7 @@ object {{className}} {
               ServerCalls.{{grpcCallsMethodName}}(
                   MethodHandlers(this, METHODID_{{methodNameUpperUnderscore}})))
           {{/methods}}
-          .build();
+          .build()
     }
   }
 
@@ -142,7 +184,7 @@ object {{className}} {
   }
 
   {{#methods}}
-  val METHODID_{{methodNameUpperUnderscore}} = {{methodNumber}};
+  val METHODID_{{methodNameUpperUnderscore}} = {{methodNumber}}
   {{/methods}}
 
   private class MethodHandlers<Req, Resp> internal constructor(
