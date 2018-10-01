@@ -43,7 +43,7 @@ fun main(args: Array<String>) {
   runBlocking {
     // === Unary call =============================================================================
 
-    val unaryResponse = greeter.greet(req("Alice")).await()
+    val unaryResponse = greeter.greet(req("Alice"))
     log.info("unary reply = ${unaryResponse.reply}")
 
     // === Server streaming call ==================================================================
@@ -59,7 +59,7 @@ fun main(args: Array<String>) {
     reqMany.send(req("Caroline"))
     reqMany.send(req("David"))
     reqMany.close()
-    val oneReply = resOne.await()
+    val oneReply = resOne
     log.info("single reply = ${oneReply.reply}")
 
     // === Bidirectional call =====================================================================

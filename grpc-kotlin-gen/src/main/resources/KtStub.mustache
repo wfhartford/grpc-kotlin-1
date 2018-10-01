@@ -53,20 +53,46 @@ object {{className}} {
     {{#methods}}
     {{#javaDoc}}{{{javaDoc}}}{{/javaDoc}}
     {{#deprecated}}@Deprecated("deprecated"){{/deprecated}}
-    fun {{methodName}}({{^isManyInput}}request: {{inputType}}{{/isManyInput}})
-        : {{^isManyInput}}{{^isManyOutput}}Deferred{{/isManyOutput}}{{#isManyOutput}}ReceiveChannel{{/isManyOutput}}<{{outputType}}>{{/isManyInput}}{{#isManyInput}}ManyTo{{^isManyOutput}}One{{/isManyOutput}}{{#isManyOutput}}Many{{/isManyOutput}}Call<{{inputType}}, {{outputType}}>{{/isManyInput}} {
-      {{^isManyOutput}}val responseDeferred = StreamObserverDeferred<{{outputType}}>(){{/isManyOutput}}
-      {{#isManyOutput}}val responseChannel = StreamObserverChannel<{{outputType}}>(){{/isManyOutput}}
-      {{#isManyInput}}val requestObserver = {{/isManyInput}}delegate.{{methodName}}({{^isManyInput}}request, {{/isManyInput}}response{{^isManyOutput}}Deferred{{/isManyOutput}}{{#isManyOutput}}Channel{{/isManyOutput}})
-      {{^isManyInput}}
-      return response{{^isManyOutput}}Deferred{{/isManyOutput}}{{#isManyOutput}}Channel{{/isManyOutput}}
-      {{/isManyInput}}
-      {{#isManyInput}}
+    {{#isManyInput}}
+    {{#isManyOutput}}
+    {{! Many input many outpout}}
+    suspend fun {{methodName}}(): ManyToManyCall<{{inputType}}, {{outputType}}> {
+      val responseChannel = StreamObserverChannel<{{outputType}}>()
+      val requestObserver = delegate.{{methodName}}(responseChannel)
       val requestChannel = LinkedListChannel<{{inputType}}>()
       connectChannelToObserver(requestChannel, requestObserver)
-      return ManyTo{{^isManyOutput}}One{{/isManyOutput}}{{#isManyOutput}}Many{{/isManyOutput}}Call(requestChannel, response{{^isManyOutput}}Deferred{{/isManyOutput}}{{#isManyOutput}}Channel{{/isManyOutput}})
-      {{/isManyInput}}
+      return ManyToManyCall(requestChannel, responseChannel)
     }
+    {{/isManyOutput}}
+    {{^isManyOutput}}
+    {{! Many input single output}}
+    suspend fun {{methodName}}(): ManyToOneCall<{{inputType}}, {{outputType}}> {
+      val responseDeferred = StreamObserverDeferred<{{outputType}}>()
+      val requestObserver = delegate.{{methodName}}(responseDeferred)
+      val requestChannel = LinkedListChannel<{{inputType}}>()
+      connectChannelToObserver(requestChannel, requestObserver)
+      return ManyToOneCall(requestChannel, responseDeferred.await())
+    }
+    {{/isManyOutput}}
+    {{/isManyInput}}
+    {{^isManyInput}}
+    {{#isManyOutput}}
+    {{! Single input many outout}}
+    suspend fun {{methodName}}(request: {{inputType}}): ReceiveChannel<{{outputType}}> {
+      val responseChannel = StreamObserverChannel<{{outputType}}>()
+      delegate.{{methodName}}(request, responseChannel)
+      return responseChannel
+    }
+    {{/isManyOutput}}
+    {{^isManyOutput}}
+    {{! Single input single outout}}
+    suspend fun {{methodName}}(request: {{inputType}}): {{outputType}} {
+      val responseDeferred = StreamObserverDeferred<{{outputType}}>()
+      delegate.{{methodName}}(request, responseDeferred)
+      return responseDeferred.await()
+    }
+    {{/isManyOutput}}
+    {{/isManyInput}}
 
     {{/methods}}
   }
@@ -163,7 +189,7 @@ object {{className}} {
 
   data class ManyToOneCall<in TRequest, out TResponse>(
       val request: SendChannel<TRequest>,
-      val response: Deferred<TResponse>)
+      val response: TResponse)
 
   data class ManyToManyCall<in TRequest, out TResponse>(
       val request: SendChannel<TRequest>,
