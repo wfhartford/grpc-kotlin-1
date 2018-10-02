@@ -1,9 +1,16 @@
 # gRPC Kotlin - Coroutine based gRPC for Kotlin
 
-[![CircleCI](https://img.shields.io/circleci/project/github/rouzwawi/grpc-kotlin.svg)](https://circleci.com/gh/rouzwawi/grpc-kotlin)
+[![CircleCI](https://img.shields.io/circleci/project/github/wfhartford/grpc-kotlin-1.svg)](https://circleci.com/gh/rouzwawi/grpc-kotlin)
 [![Maven Central](https://img.shields.io/maven-central/v/io.rouz/grpc-kotlin-gen.svg)](https://search.maven.org/#search%7Cga%7C1%7Cg%3A%22io.rouz%22%20grpc-kotlin-gen)
 
 gRPC Kotlin is a [protoc] plugin for generating native Kotlin bindings using [coroutine primitives] for [gRPC] services.
+
+This project is a fork of [rouzwawi/grpc-kotlin](https://github.com/rouzwawi/grpc-kotlin), which did all the hard work. This for includes changes to the generated Kotlin code which I believe make for cleaner generated and user code. Specifically, the following changes effect the user:
+* The generated code no longer catches exceptions thrown by the service implementation, allowing exceptions to be handled by gRPC or a user's interceptor.
+* All functions in the Stub and ImplBase classes are now suspending functions.
+* Non streaming functions return a single object of type _T_ instead of returning _Deferred<T>_.
+
+I believe these changes represent more idiomatic Kotlin for both generated code an user written code.
 
 > This project is an early prototype and has not been tested in production. But don't hesitate to try it out and open up issues in the project if you run into any problems. PR's are welcome!
 
@@ -14,11 +21,11 @@ and read. Getting your head around the `StreamObserver<T>`'s can be a bit tricky
 with the method argument being the response observer and the return value being the request observer, it all
 feels a bit backwards to what a plain old synchronous version of the handler would look like.
 
-In situations where you'd want to coordinate several request and response messages in one call, you'll and up
+In situations where you'd want to coordinate several request and response messages in one call, you'll end up
 having to manage some tricky state and synchronization between the observers. There's some [reactive bindings]
 for gRPC which make this easier. But I think we can do better!
 
-Enter Kotlin Coroutines! By generating native Kotlin stubs that allows us to use [`Channel`] and [`Deferred`],
+Enter Kotlin Coroutines! By generating native Kotlin stubs that allows us to use [`Channel`]s and suspending functions,
 we can write our handler and client code in a much more readable fashion that is a lot easier to reason
 about.
 
@@ -61,7 +68,7 @@ Add the `grpc-kotlin-gen` plugin to your `protobuf-maven-plugin` configuration (
 <protocPlugins>
     <protocPlugin>
         <id>GrpcKotlinGenerator</id>
-        <groupId>io.rouz</groupId>
+        <groupId>ca.cutterslade</groupId>
         <artifactId>grpc-kotlin-gen</artifactId>
         <version>0.0.2</version>
         <mainClass>io.rouz.grpc.kotlin.GrpcKotlinGenerator</mainClass>
@@ -87,7 +94,7 @@ protobuf {
             artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}"
         }
         grpckotlin {
-            artifact = "io.rouz:grpc-kotlin-gen:0.0.2:jdk8@jar"
+            artifact = "ca.cutterslade:grpc-kotlin-gen:0.0.2:jdk8@jar"
         }
     }
     generateProtoTasks {
@@ -102,7 +109,7 @@ protobuf {
 ### Server
 
 After compilation, you'll find the generated Kotlin stubs in an `object` named `GreeterGrpcKt`. Both the
-service base class and client stub will use `Deferred<T>` and `{Send,Receive}Channel<T>` instead of the
+service base class and client stub will use suspending functions and `{Send,Receive}Channel<T>` for stream RPCs instead of the
 typical `StreamObserver<T>` interfaces.
 
 Here's a server implementation using some of the [core coroutine primitives] like `async` and `produce`
@@ -116,17 +123,13 @@ import kotlinx.coroutines.experimental.channels.produce
 
 class GreeterImpl : GreeterGrpcKt.GreeterImplBase() {
 
-  private val pool = newFixedThreadPoolContext(4, "server-pool")
-
-  override fun greet(request: GreetRequest)
-      : Deferred<GreetReply> = async(pool) {
-    GreetReply.newBuilder()
+  override suspend fun greet(request: GreetRequest)
+      : Deferred<GreetReply> = GreetReply.newBuilder()
         .setReply("Hello " + request.greeting)
         .build()
-  }
 
-  override fun greetServerStream(request: GreetRequest)
-      : ReceiveChannel<GreetReply> = produce(pool) {
+  override suspend fun greetServerStream(request: GreetRequest)
+      : ReceiveChannel<GreetReply> = produce {
     send(GreetReply.newBuilder()
         .setReply("Hello ${request.greeting}!")
         .build())
@@ -135,20 +138,20 @@ class GreeterImpl : GreeterGrpcKt.GreeterImplBase() {
         .build())
   }
 
-  override fun greetClientStream(requestChannel: ReceiveChannel<GreetRequest>)
-      : Deferred<GreetReply> = async(pool) {
+  override suspend fun greetClientStream(requestChannel: ReceiveChannel<GreetRequest>)
+      : Deferred<GreetReply> {
     val greetings = mutableListOf<String>()
 
     for (request in requestChannel) {
       greetings.add(request.greeting)
     }
 
-    GreetReply.newBuilder()
+    return GreetReply.newBuilder()
         .setReply("Hi to all of $greetings!")
         .build()
   }
 
-  override fun greetBidirectional(requestChannel: ReceiveChannel<GreetRequest>)
+  override suspend fun greetBidirectional(requestChannel: ReceiveChannel<GreetRequest>)
       : ReceiveChannel<GreetReply> = produce(pool) {
     var count = 0
     val queue = mutableListOf<Job>()
@@ -171,7 +174,7 @@ class GreeterImpl : GreeterGrpcKt.GreeterImplBase() {
 
 ### Client
 
-The generated client stub is also fully implemented using `Deferred` and `SendChannel`.
+The generated client stub is also fully implemented using suspending functions and `SendChannel`.
 
 ```kotlin
 import io.grpc.ManagedChannelBuilder
@@ -188,7 +191,7 @@ fun main(args: Array<String>) {
   runBlocking {
     // === Unary call =============================================================================
 
-    val unaryResponse = greeter.greet(req("Alice")).await()
+    val unaryResponse = greeter.greet(req("Alice"))
     println("unary reply = ${unaryResponse.reply}")
 
     // === Server streaming call ==================================================================
@@ -242,21 +245,31 @@ fun main(args: Array<String>) {
 
 #### Service
 
-Using [`async`] coroutine builder to return a single message.
+Using suspending function to return a single message.
 
 ```kotlin
-override fun greet(request: GreetRequest): Deferred<GreetReply> = async {
+override suspend fun greet(request: GreetRequest): Deferred<GreetReply> {
   // return GreetReply message
 }
 ```
 
 #### Client
 
-Using `await()` on `Deferred<T>`.
+Calling a stub function to obtain a reply.
 
 ```kotlin
-val response: Deferred<GreetReply> = stub.greet( /* GreetRequest */ )
-val responseMessage = response.await()
+val responseMessage: GreetReply = stub.greet( /* GreetRequest */ )
+```
+
+#### Asynchronous Client
+
+Using the async/await pattern to do some other work before getting the reply.
+
+```kotlin
+val deferredResponse: Deferred<GreetReply> = async { stub.greet( /* GreetRequest */ ) }
+// other processing while waiting for the server
+val responseMessage: GreetReply = deferredResponse.await()
+
 ```
 
 ### Streaming request, Unary response

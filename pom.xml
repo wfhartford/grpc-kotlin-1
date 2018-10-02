@@ -30,6 +30,11 @@
       <email>me@rouz.io</email>
       <name>Rouzbeh Delavari</name>
     </developer>
+    <developer>
+      <id>wfhartford</id>
+      <email>wesley@cutterslade.ca</email>
+      <name>Wesley Hartford</name>
+    </developer>
   </developers>
 
   <scm>
