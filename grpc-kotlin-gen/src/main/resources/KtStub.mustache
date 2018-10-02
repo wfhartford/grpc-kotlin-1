@@ -110,9 +110,9 @@ object {{className}} {
       throw io.grpc.StatusRuntimeException(io.grpc.Status.UNIMPLEMENTED)
     }
 
-    internal fun {{methodName}}Internal(responseObserver: StreamObserver<{{outputType}}>): StreamObserver<{{inputType}}> {
+    internal suspend fun {{methodName}}Internal(responseObserver: StreamObserver<{{outputType}}>): StreamObserver<{{inputType}}> {
       val requestChannel = StreamObserverChannel<{{inputType}}>()
-      val responseChannel = runBlocking { {{methodName}}(requestChannel) }
+      val responseChannel = {{methodName}}(requestChannel)
       connectChannelToObserver(responseChannel, responseObserver)
       return requestChannel
     }
@@ -123,7 +123,7 @@ object {{className}} {
       throw io.grpc.StatusRuntimeException(io.grpc.Status.UNIMPLEMENTED)
     }
 
-    internal fun {{methodName}}Internal(responseObserver: StreamObserver<{{outputType}}>): StreamObserver<{{inputType}}> {
+    internal suspend fun {{methodName}}Internal(responseObserver: StreamObserver<{{outputType}}>): StreamObserver<{{inputType}}> {
       val requestChannel = StreamObserverChannel<{{inputType}}>()
       val responseDeferred = async { {{methodName}}(requestChannel) }
       connectDeferredToObserver(responseDeferred, responseObserver)
@@ -138,8 +138,8 @@ object {{className}} {
       throw io.grpc.StatusRuntimeException(io.grpc.Status.UNIMPLEMENTED)
     }
 
-    internal fun {{methodName}}Internal(request: {{inputType}}, responseObserver: StreamObserver<{{outputType}}>) {
-      val responseChannel = runBlocking { {{methodName}}(request) }
+    internal suspend fun {{methodName}}Internal(request: {{inputType}}, responseObserver: StreamObserver<{{outputType}}>) {
+      val responseChannel = {{methodName}}(request)
       connectChannelToObserver(responseChannel, responseObserver)
     }
     {{/isManyOutput}}
@@ -149,7 +149,7 @@ object {{className}} {
       throw io.grpc.StatusRuntimeException(io.grpc.Status.UNIMPLEMENTED)
     }
 
-    internal fun {{methodName}}Internal(request: {{inputType}}, responseObserver: StreamObserver<{{outputType}}>) {
+    internal suspend fun {{methodName}}Internal(request: {{inputType}}, responseObserver: StreamObserver<{{outputType}}>) {
       val responseDeferred = async { {{methodName}}(request) }
       connectDeferredToObserver(responseDeferred, responseObserver)
     }
@@ -169,22 +169,16 @@ object {{className}} {
     }
   }
 
-  private fun <E> connectChannelToObserver(channel: ReceiveChannel<E>, observer: StreamObserver<E>) {
-    // todo: specify coroutine context
-    runBlocking {
-      for (value in channel) {
-        observer.onNext(value)
-      }
-      observer.onCompleted()
+  private suspend fun <E> connectChannelToObserver(channel: ReceiveChannel<E>, observer: StreamObserver<E>) {
+    for (value in channel) {
+      observer.onNext(value)
     }
+    observer.onCompleted()
   }
 
-  private fun <E> connectDeferredToObserver(deferred: Deferred<E>, observer: StreamObserver<E>) {
-    // todo: specify coroutine context
-    runBlocking {
-      observer.onNext(deferred.await())
-      observer.onCompleted()
-    }
+  private suspend fun <E> connectDeferredToObserver(deferred: Deferred<E>, observer: StreamObserver<E>) {
+    observer.onNext(deferred.await())
+    observer.onCompleted()
   }
 
   data class ManyToOneCall<in TRequest, out TResponse>(
@@ -223,32 +217,32 @@ object {{className}} {
 
 
     @Suppress("UNCHECKED_CAST")
-    override fun invoke(request: Req, responseObserver: StreamObserver<Resp>) {
-      when (methodId) {
-        {{#methods}}
-        {{^isManyInput}}
-        METHODID_{{methodNameUpperUnderscore}} ->
-            serviceImpl.{{methodName}}Internal(
-                request as {{inputType}},
-                responseObserver as StreamObserver<{{outputType}}>)
-        {{/isManyInput}}
-        {{/methods}}
-        else -> throw AssertionError()
+    override fun invoke(request: Req, responseObserver: StreamObserver<Resp>) = when (methodId) {
+      {{#methods}}
+      {{^isManyInput}}
+      METHODID_{{methodNameUpperUnderscore}} -> runBlocking {
+          serviceImpl.{{methodName}}Internal(
+              request as {{inputType}},
+              responseObserver as StreamObserver<{{outputType}}>
+          )
       }
+      {{/isManyInput}}
+      {{/methods}}
+      else -> throw AssertionError()
     }
 
     @Suppress("UNCHECKED_CAST")
-    override fun invoke(responseObserver: StreamObserver<Resp>): StreamObserver<Req> {
-      when (methodId) {
-        {{#methods}}
-        {{#isManyInput}}
-        METHODID_{{methodNameUpperUnderscore}} ->
-            return serviceImpl.{{methodName}}Internal(
-                responseObserver as StreamObserver<{{outputType}}>) as StreamObserver<Req>
-        {{/isManyInput}}
-        {{/methods}}
-        else -> throw AssertionError()
+    override fun invoke(responseObserver: StreamObserver<Resp>) = when (methodId) {
+      {{#methods}}
+      {{#isManyInput}}
+      METHODID_{{methodNameUpperUnderscore}} -> runBlocking {
+          serviceImpl.{{methodName}}Internal(
+              responseObserver as StreamObserver<{{outputType}}>
+          ) as StreamObserver<Req>
       }
+      {{/isManyInput}}
+      {{/methods}}
+      else -> throw AssertionError()
     }
   }
 }
