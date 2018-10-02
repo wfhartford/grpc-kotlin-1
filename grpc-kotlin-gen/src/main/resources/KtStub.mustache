@@ -71,7 +71,7 @@ object {{className}} {
       val requestObserver = delegate.{{methodName}}(responseDeferred)
       val requestChannel = LinkedListChannel<{{inputType}}>()
       connectChannelToObserver(requestChannel, requestObserver)
-      return ManyToOneCall(requestChannel, responseDeferred.await())
+      return ManyToOneCall(requestChannel, responseDeferred)
     }
     {{/isManyOutput}}
     {{/isManyInput}}
@@ -183,7 +183,7 @@ object {{className}} {
 
   data class ManyToOneCall<in TRequest, out TResponse>(
       val request: SendChannel<TRequest>,
-      val response: TResponse)
+      val response: Deferred<TResponse>)
 
   data class ManyToManyCall<in TRequest, out TResponse>(
       val request: SendChannel<TRequest>,

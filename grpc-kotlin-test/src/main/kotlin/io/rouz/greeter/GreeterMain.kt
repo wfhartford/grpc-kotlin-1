@@ -59,7 +59,7 @@ fun main(args: Array<String>) {
     reqMany.send(req("Caroline"))
     reqMany.send(req("David"))
     reqMany.close()
-    val oneReply = resOne
+    val oneReply = resOne.await()
     log.info("single reply = ${oneReply.reply}")
 
     // === Bidirectional call =====================================================================
