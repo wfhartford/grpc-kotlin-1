@@ -16,7 +16,8 @@ import kotlinx.coroutines.experimental.async
 import kotlinx.coroutines.experimental.launch
 import kotlinx.coroutines.experimental.CompletableDeferred
 import kotlinx.coroutines.experimental.Deferred
-import kotlinx.coroutines.experimental.channels.LinkedListChannel
+import kotlinx.coroutines.experimental.GlobalScope
+import kotlinx.coroutines.experimental.channels.Channel as KtChannel
 import kotlinx.coroutines.experimental.channels.ReceiveChannel
 import kotlinx.coroutines.experimental.channels.SendChannel
 import kotlinx.coroutines.experimental.runBlocking
@@ -60,7 +61,7 @@ object {{className}} {
     suspend fun {{methodName}}(): ManyToManyCall<{{inputType}}, {{outputType}}> {
       val responseChannel = StreamObserverChannel<{{outputType}}>()
       val requestObserver = delegate.{{methodName}}(responseChannel)
-      val requestChannel = LinkedListChannel<{{inputType}}>()
+      val requestChannel = KtChannel<{{inputType}}>(KtChannel.UNLIMITED)
       connectChannelToObserver(requestChannel, requestObserver)
       return ManyToManyCall(requestChannel, responseChannel)
     }
@@ -70,7 +71,7 @@ object {{className}} {
     suspend fun {{methodName}}(): ManyToOneCall<{{inputType}}, {{outputType}}> {
       val responseDeferred = StreamObserverDeferred<{{outputType}}>()
       val requestObserver = delegate.{{methodName}}(responseDeferred)
-      val requestChannel = LinkedListChannel<{{inputType}}>()
+      val requestChannel = KtChannel<{{inputType}}>(KtChannel.UNLIMITED)
       connectChannelToObserver(requestChannel, requestObserver)
       return ManyToOneCall(requestChannel, responseDeferred)
     }
@@ -126,7 +127,7 @@ object {{className}} {
 
     internal suspend fun {{methodName}}Internal(responseObserver: StreamObserver<{{outputType}}>): StreamObserver<{{inputType}}> {
       val requestChannel = StreamObserverChannel<{{inputType}}>()
-      val responseDeferred = async { {{methodName}}(requestChannel) }
+      val responseDeferred = GlobalScope.async { {{methodName}}(requestChannel) }
       connectDeferredToObserver(responseDeferred, responseObserver)
       return requestChannel
     }
@@ -151,7 +152,7 @@ object {{className}} {
     }
 
     internal suspend fun {{methodName}}Internal(request: {{inputType}}, responseObserver: StreamObserver<{{outputType}}>) {
-      val responseDeferred = async { {{methodName}}(request) }
+      val responseDeferred = GlobalScope.async { {{methodName}}(request) }
       connectDeferredToObserver(responseDeferred, responseObserver)
     }
     {{/isManyOutput}}
@@ -171,7 +172,7 @@ object {{className}} {
   }
 
   private suspend fun <E> connectChannelToObserver(channel: ReceiveChannel<E>, observer: StreamObserver<E>) {
-    launch {
+    GlobalScope.launch {
       for (value in channel) {
         observer.onNext(value)
       }
@@ -180,7 +181,7 @@ object {{className}} {
   }
 
   private suspend fun <E> connectDeferredToObserver(deferred: Deferred<E>, observer: StreamObserver<E>) {
-    launch {
+    GlobalScope.launch {
       observer.onNext(deferred.await())
       observer.onCompleted()
     }
@@ -198,11 +199,13 @@ object {{className}} {
     : StreamObserver<E>,
       CompletableDeferred<E> by CompletableDeferred() {
     override fun onNext(value: E) { complete(value) }
-    override fun onError(t: Throwable) { completeExceptionally(t) }
+    override fun onError(t: Throwable) { cancel(t) }
     override fun onCompleted() { /* nothing */ }
   }
 
-  private class StreamObserverChannel<E> : LinkedListChannel<E>(), StreamObserver<E> {
+  private class StreamObserverChannel<E>
+    : KtChannel<E> by KtChannel<E>(KtChannel.UNLIMITED),
+      StreamObserver<E> {
     override fun onNext(value: E) { offer(value) }
     override fun onError(t: Throwable?) { close(cause = t) }
     override fun onCompleted() { close(cause = null) }

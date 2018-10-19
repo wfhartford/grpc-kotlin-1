@@ -41,7 +41,7 @@ class GreeterImpl : GreeterGrpcKt.GreeterImplBase() {
         .build()
   }
 
-  override suspend fun greetServerStream(request: GreetRequest): ReceiveChannel<GreetReply> = produce(pool) {
+  override suspend fun greetServerStream(request: GreetRequest): ReceiveChannel<GreetReply> = GlobalScope.produce(pool) {
     log.info(request.greeting)
     send(GreetReply.newBuilder()
         .setReply("Hello ${request.greeting}!")
@@ -65,7 +65,7 @@ class GreeterImpl : GreeterGrpcKt.GreeterImplBase() {
   }
 
   override suspend fun greetBidirectional(requestChannel: ReceiveChannel<GreetRequest>)
-      : ReceiveChannel<GreetReply> = produce(pool) {
+      : ReceiveChannel<GreetReply> = GlobalScope.produce(pool) {
     var count = 0
     val queue = mutableListOf<Job>()
 

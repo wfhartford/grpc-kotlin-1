@@ -10,7 +10,7 @@
 
   <groupId>ca.cutterslade</groupId>
   <artifactId>grpc-kotlin-parent</artifactId>
-  <version>0.0.3-SNAPSHOT</version>
+  <version>0.0.4-SNAPSHOT</version>
   <packaging>pom</packaging>
 
   <name>grpc-kotlin</name>
